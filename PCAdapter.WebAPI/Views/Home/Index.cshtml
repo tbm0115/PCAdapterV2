@@ -1,0 +1,420 @@
+﻿@{
+  ViewBag.Title = "Query";
+}
+@section styles{
+  <link href="~/Content/jQuery-QueryBuilder/dist/css/query-builder.dark.min.css" rel="stylesheet" />
+  <style type="text/css">
+    .rule-operator-container > span{
+      color: whitesmoke;
+    }
+  </style>
+}
+@section scripts{
+  <script type="text/javascript" src="~/Scripts/moment.min.js"></script>
+  <script src="~/Content/jQuery-QueryBuilder/dist/js/query-builder.standalone.min.js"></script>
+  <script type="text/javascript">
+    var durations = {};
+    var dataItems = {};
+    var query = "";
+    var baseTitle = document.title;
+    $(document).ready(function () {
+      $.ajax({
+        url: "/api/dataitems",
+        method: "GET",
+        success: function (data) {
+          dataItems = data;
+          var sel = $("#selDataItems")[0];
+          for (var len = dataItems.length, n = 0; n < len; n++) {
+            var opt = document.createElement("option");
+            opt.value = dataItems[n].Id;
+            opt.innerText = dataItems[n].Name;
+            sel.options.add(opt);
+          }
+
+          SetupQueryBuilder();
+        }
+      });
+      $("#btnQuery").on("click", function () {
+        SetTableNote("Searching...", "info");
+        var opt = $("#selDataItems").val();
+        QueryDuration(opt);
+      });
+      $("#btnFilter").on("click", function () {
+        SetTableNote("Filtering...", "info");
+        var expr = $("#txtFilter").val();
+        FilterDuration(expr);
+      });
+    });
+    function CompleteDataset(src) {
+      if (typeof src != "undefined" && src != null && src.length > 0) {
+        for (var len = src.length, n = 0; n < len; n++) {
+          let start = moment(src[n].Started);
+          let end = moment(src[n].Ended);
+          let diff = end.diff(start);
+          src[n]["Duration"] = moment.utc(diff);
+        }
+        return src;
+      }
+      return [];
+    }
+    function QueryDuration(dataItemName) {
+      query = $("#selDataItems option[value='" + dataItemName + "']").text();
+      $.ajax({
+        url: "/api/durations/today/" + encodeURIComponent(dataItemName),
+        method: "GET",
+        success: function (data) {
+          document.title = query + " - " + baseTitle;
+          durations = CompleteDataset(data);
+          UpdateTable(durations);
+        }
+      });
+    }
+    function FilterDuration(expr) {
+      var reg = new RegExp(expr, 'g');
+      var nw = durations.filter(function (e, i) {
+        return reg.test(e.Value);// eval(expr);
+      });
+      UpdateTable(nw);
+    }
+    function SetTableNote(message, cssClass) {
+      $("#tblDurations tbody").html("");
+      var td = $("#tblDurations tbody")[0].appendChild(document.createElement("tr")).appendChild(document.createElement("td"));
+      td.setAttribute("class", cssClass);
+      td.setAttribute("colspan", "3");
+      td.textContent = message;
+    }
+    function UpdateTable(dataset) {
+      var tbody = $("#tblDurations tbody")[0];
+      tbody.innerHTML = "";
+      if (typeof dataset != "undefined" && dataset != null && dataset.length > 0) {
+        for (var len = dataset.length, n = 0; n < len; n++) {
+          var tr = tbody.appendChild(document.createElement("tr"));
+          tr.appendChild(document.createElement("td")).textContent = (new Date(dataset[n].Started + "Z")).toLocaleString();
+          tr.appendChild(document.createElement("td")).textContent = dataset[n].Value;
+          tr.appendChild(document.createElement("td")).textContent = displayTime(dataset[n]);
+        }
+      } else {
+        SetTableNote("No Durations found for " + query, "warning");
+      }
+    }
+
+
+    // https://stackoverflow.com/questions/14350148/convert-ticks-to-time-format-hhmmss
+    function displayTime(data) {
+      if (data.Ended == null) {
+        return "Ongoing";
+      }
+      //let start = moment(data.Started);
+      //let end = moment(data.Ended);
+      //let diff = end.diff(start);
+
+      return data.Duration.format("HH:mm:ss.SS");// moment.utc(diff).format("HH:mm:ss.SS");
+      //var dur = moment.duration(ticksMS);
+      //return dur.toString();//.humanize();
+    }
+
+    function pad(n, width) {
+      var n = n + '';
+      return n.length >= width ? n : new Array(width - n.length + 1).join('0') + n;
+    }
+  </script>
+  <script type="text/javascript">
+    function SetupQueryBuilder() {
+      var dataItemValues = dataItems.map(function (e, i) { return { value: e.Name, label: e.Name }; });
+      $("#queryBuilder").queryBuilder({
+        conditions: ['AND', 'OR', 'WHILE'],
+        rules: {
+          condition: 'AND',
+          flags: {
+            condition_readonly: true,
+            no_add_rule: true,
+            no_add_group: true
+          },
+          rules: [
+            {
+              id: 'dataItem',
+              operator: 'equal',
+              flags: {
+                no_delete: true
+              }
+            },
+            {
+              condition: 'AND',
+              flags: {
+                condition_readonly: true,
+                no_add_group: true,
+                no_add_rule: true,
+                no_delete: true
+              },
+              rules: [
+                {
+                  id: 'started',
+                  operator: 'greater_or_equal',
+                  flags: {
+                    no_delete: true
+                  }
+                },
+                {
+                  id: 'ended',
+                  operator: 'less_or_equal',
+                  flags: {
+                    no_delete: true
+                  }
+                }
+              ]
+            },
+            {
+              condition: 'AND',
+              flags: {
+                condition_readonly: true,
+                no_delete: true
+              },
+              rules: [
+                {
+                  id: 'value'
+                },
+                {
+                  condition: 'WHILE',
+                  rules: [
+                    {
+                      id: 'dataItem'
+                    },
+                    {
+                      condition: 'AND',
+                      rules: [
+                        {
+                          id: 'value'
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        filters: [
+          {
+            id: 'dataItem',
+            label: 'DataItem',
+            type: 'string',
+            input: 'select',
+            values: dataItemValues,
+            operators: ['equal'],
+            validation: {
+              allow_empty_value: false,
+              messages: {
+                allow_empty_value: "Must select a DataItem."
+              }
+            }
+          },
+          {
+            id: 'value',
+            label: 'DataItem Value',
+            type: 'string',
+            operators: ['in'],
+            default_value: "(.*)"
+          },
+          {
+            id: 'started',
+            label: 'From',
+            type: 'date',
+            default_value: new Date().toLocaleDateString(),
+            operators: ['greater_or_equal']
+          },
+          {
+            id: 'ended',
+            label: 'To',
+            type: 'date',
+            default_value: new Date().toLocaleDateString(),
+            operators: ['less_or_equal']
+          }
+        ]
+      });
+    }
+
+    $(document).ready(function () {
+      $("#btnQueryBuilder").on("click", function () {
+        var qb = $("#queryBuilder")[0].queryBuilder;
+        if (qb.validate()) {
+          var rules = qb.getRules().rules;
+          console.log("Rules: ", rules);
+          var dataItemRule = rules[0];
+          var startedRule = rules[1].rules[0];
+          var endedRule = rules[1].rules[1];
+          var additionalRules = rules[2].rules;
+
+          var startDate = moment(startedRule.value).valueOf();
+          var endDate = moment(endedRule.value).valueOf();
+
+          queryData(dataItemRule.value, startDate, endDate, additionalRules, "AND", function (data) {
+              durations = CompleteDataset(data);
+              UpdateTable(data);
+          });
+
+        }
+      });
+    });
+    function queryData(dataItem, start, end, rules, condition, callback, postProcess) {
+      if (typeof postProcess == "undefined" || postProcess == null) {
+        postProcess = true;
+      }
+      var url = "api/durations/dataitem/" + dataItem + "/from/" + moment(start).format('YYYY-MM-DD') + "/to/" + moment(end).format('YYYY-MM-DD');
+      $.ajax({
+        url: url,
+        method: "GET",
+        success: (function (data) {
+          //console.log("[QueryBuilder.queryData] Preprocessing length: ", data.length);
+          if (this.postProcess) {
+            data = processRule(this.rules, this.condition, data, { start: this.start, end: this.end });
+          }
+          this.callback(data);
+        }).bind({ rules: rules, condition: condition, start: start, end: end, callback: callback, postProcess: postProcess }),
+        async: false
+      });
+    }
+    function processRule(rules, condition, dataSource, options) {
+      var predicateSources = {
+        "AND": [],
+        "OR": []
+      };
+      var nwSource = dataSource;// [];
+      if (typeof rules !== "undefined" && rules != null && rules.length > 0) {
+        //console.log("PROCESSING " + rules.length + " RULES");
+        for (var len = rules.length, n = 0; n < len; n++) {
+          var rule = rules[n];
+          //console.log("Processing Rule[" + rule.field + "]: ", rule);
+          if (typeof rule.condition !== "undefined" && typeof rule.rules !== "undefined") {
+            if (rule.condition == "WHILE") {
+              var whileSource = processRule(rule.rules, "WHILE", [], options);
+              //console.log("[QueryBuilder.processRule] While yielded " + whileSource.length + " results.");
+              if (whileSource.length > 0) {
+                console.log("[While] Before filter: ", dataSource.length);
+                var filterFunction = function (dataObject, i) {
+                  return (dataObject.Ended !== null &&
+                    whileSource.filter(function (whileObject, j) {
+                      return (whileObject.Ended !== null
+                        && (
+                          (
+                            (whileObject.Started >= dataObject.Started && whileObject.Ended <= dataObject.Ended) // Started and Ended During
+                            //|| (whileObject.Started <= dataObject.Started && whileObject.Ended <= dataObject.Ended) // Ended During
+                            //|| (whileObject.Started >= dataObject.Started && whileObject.Ended >= dataObject.Ended) // Started During
+                            || (whileObject.Started <= dataObject.Started && whileObject.Ended >= dataObject.Ended) // Started Before and Ended After
+                          )
+                          ||
+                          (
+                            (dataObject.Started >= whileObject.Started && dataObject.Ended <= whileObject.Ended) // Started and Ended During
+                            //|| (dataObject.Started <= whileObject.Started && dataObject.Ended <= whileObject.Ended) // Ended During
+                            //|| (dataObject.Started >= whileObject.Started && dataObject.Ended >= whileObject.Ended) // Started During
+                            || (dataObject.Started <= whileObject.Started && dataObject.Ended >= whileObject.Ended) // Started Before and Ended After
+                          )
+                        )
+                      )
+                    }).length > 0);
+                }
+                var tmpSource = dataSource.filter(filterFunction);
+                console.log("[While] After filter: ", tmpSource.length);
+                predicateSources["AND"].push(tmpSource);
+              } else {
+                predicateSources["AND"].push(new Array());
+              }
+            } else {
+              dataSource = processRule(rule.rules, rule.condition, dataSource);
+            }
+          } else if (rule.id == "value") {
+            var reg = new RegExp(rule.value, 'g');
+            console.log("\tApplying [" + condition + "] " + rule.field + " with: ", rule.value);
+            predicateSources[condition].push(dataSource.filter(function (e, i) {
+              return reg.test(e.Value);
+            }));
+          } else if (rule.id == "dataItem") {
+            //console.log("Querying DataItem");
+            queryData(rule.value, this.start, this.end, rule.rules, condition, (function (data) {
+              //console.log("\tGot " + data.length + " results from " + rule.field);
+              //console.log("\t\tParent Rules Reference: ", rules);
+              //nwSource = data;
+              if (typeof data.filter == "undefined") {
+                console.log("Caught culprit", data);
+              }
+              predicateSources["OR"].push(data);
+            }), false);
+            //console.log("End DataItem");
+          }
+        }
+        console.log("Predicate Sources for Condition[" + condition + "]: ", predicateSources);
+        var addUnique = function (src, cond, nw) {
+          if (typeof src.filter === "undefined") {
+            console.warn("Source.filter is undefined",src);
+          } else if (typeof nw.filter === "undefined") {
+            console.warn("nw.filter is undefined");
+          }
+          if (cond == "AND") {
+            if (nw.length == 0) {
+              return [];
+            } else {
+              return src.filter(v => nw.filter(w => w.Id == v.Id).length > 0);
+            }
+          } else if (cond == "OR") {
+            if (src.length == 0) {
+              return nw;
+            } else {
+              return src.filter(v => nw.filter(w => w.Id == v.Id).length <= 0);
+            }
+          } else {
+            console.error("Unknown condition type");
+            return src;
+          }
+        }
+        if (predicateSources["OR"].length > 0) {
+          for (var olen = predicateSources["OR"].length, o = 0; o < olen; o++) {
+            nwSource = addUnique(predicateSources["OR"][o], "OR", nwSource);
+          }
+        }
+        if (predicateSources["AND"].length > 0 && condition !== "WHILE") {
+          if (nwSource.length == 0) {
+            nwSource = dataSource;
+          }
+          for (var alen = predicateSources["AND"].length, a = 0; a < alen; a++) {
+            nwSource = addUnique(predicateSources["AND"][a], "AND", nwSource);
+          }
+        } else if (condition == "WHILE"){
+          //nwSource = dataSource;
+        }
+      }
+      //console.log("Output for Condition[" + condition + "]: ", nwSource);
+      return nwSource;
+    }
+  </script>
+}
+<div class="row">
+  <div class="col-lg-6 col-md-6">
+    <div class="form-group">
+      <label for="selDataItem">Select a DataItem:</label>
+      <select class="form-control" id="selDataItems"></select>
+    </div>
+    <button id="btnQuery" type="button" class="btn btn-block btn-primary">Query</button>
+  </div>
+  <div class="col-lg-6 col-md-6">
+    <div class="form-group">
+      <label for="txtFilter">Filter (RegExp):</label>
+      <input type="text" class="form-control" id="txtFilter" />
+    </div>
+    <button id="btnFilter" type="button" class="btn btn-block btn-primary">Filter</button>
+  </div>
+</div>
+<br />
+<div class="table-responsive">
+  <table id="tblDurations" class="table table-condensed table-hover table-striped">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Value</th>
+        <th>Duration <small>(hh:mm:ss.ms)</small></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div id="queryBuilder"></div>
+<button type="button" class="btn btn-block btn-primary" id="btnQueryBuilder">Run Query</button>
