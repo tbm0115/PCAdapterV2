@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdapterContext", "AdapterCo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PCAdapter.WebAPI", "PCAdapter.WebAPI\PCAdapter.WebAPI.csproj", "{EA52D83A-DFCF-43BE-92F8-56BBFB422F71}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PCAdapter.GraphQL", "PCAdapter.GraphQL\PCAdapter.GraphQL.csproj", "{41077846-B189-4C56-B38F-986246E9950E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{EA52D83A-DFCF-43BE-92F8-56BBFB422F71}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EA52D83A-DFCF-43BE-92F8-56BBFB422F71}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EA52D83A-DFCF-43BE-92F8-56BBFB422F71}.Release|Any CPU.Build.0 = Release|Any CPU
+		{41077846-B189-4C56-B38F-986246E9950E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{41077846-B189-4C56-B38F-986246E9950E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{41077846-B189-4C56-B38F-986246E9950E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{41077846-B189-4C56-B38F-986246E9950E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

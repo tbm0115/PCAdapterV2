@@ -7,44 +7,61 @@
     .rule-operator-container > span{
       color: whitesmoke;
     }
+    #timeline{
+      width: 100%;
+      height: 50px;
+      border: 1px solid gray;
+      border-radius: 3px;
+      margin-top: 6px;
+      margin-bottom: 6px;
+    }
   </style>
 }
 @section scripts{
   <script type="text/javascript" src="~/Scripts/moment.min.js"></script>
   <script src="~/Content/jQuery-QueryBuilder/dist/js/query-builder.standalone.min.js"></script>
   <script type="text/javascript">
-    var durations = {};
-    var dataItems = {};
+    var durations = [];
+    var dataItems = [];
+    var adapters = [];
     var query = "";
     var baseTitle = document.title;
     $(document).ready(function () {
       $.ajax({
-        url: "/api/dataitems",
+        url: "/api/AdapterConfigs",
+        method: "GET",
+        success: function (data) {
+          adapters = data;
+
+          var sel = $("#selAdapterConfig")[0];
+          sel.innerHTML = "";
+          sel.appendChild(document.createElement("option")).innerText = "Select a Configuration";
+          for (var len = adapters.length, n = 0; n < len; n++) {
+            var opt = document.createElement("option");
+            opt.innerText = adapters[n].Name;
+            opt.value = adapters[n].Id;
+            sel.appendChild(opt);
+          }
+
+        }
+      });
+      $("#selAdapterConfig").change(function () {
+        var selection = $("#selAdapterConfig").val();
+        GetDataItems(selection);
+      });
+    });
+
+    function GetDataItems(adapterConfigId) {
+      $.ajax({
+        url: "/api/AdapterConfigs/" + adapterConfigId + "/DataItems",
         method: "GET",
         success: function (data) {
           dataItems = data;
-          var sel = $("#selDataItems")[0];
-          for (var len = dataItems.length, n = 0; n < len; n++) {
-            var opt = document.createElement("option");
-            opt.value = dataItems[n].Id;
-            opt.innerText = dataItems[n].Name;
-            sel.options.add(opt);
-          }
 
           SetupQueryBuilder();
         }
       });
-      $("#btnQuery").on("click", function () {
-        SetTableNote("Searching...", "info");
-        var opt = $("#selDataItems").val();
-        QueryDuration(opt);
-      });
-      $("#btnFilter").on("click", function () {
-        SetTableNote("Filtering...", "info");
-        var expr = $("#txtFilter").val();
-        FilterDuration(expr);
-      });
-    });
+    }
     function CompleteDataset(src) {
       if (typeof src != "undefined" && src != null && src.length > 0) {
         for (var len = src.length, n = 0; n < len; n++) {
@@ -84,15 +101,33 @@
       td.textContent = message;
     }
     function UpdateTable(dataset) {
+      drawTimeline();
       var tbody = $("#tblDurations tbody")[0];
       tbody.innerHTML = "";
       if (typeof dataset != "undefined" && dataset != null && dataset.length > 0) {
+        var timesum = 0;
+        var cnt = 0;
         for (var len = dataset.length, n = 0; n < len; n++) {
           var tr = tbody.appendChild(document.createElement("tr"));
           tr.appendChild(document.createElement("td")).textContent = (new Date(dataset[n].Started + "Z")).toLocaleString();
           tr.appendChild(document.createElement("td")).textContent = dataset[n].Value;
           tr.appendChild(document.createElement("td")).textContent = displayTime(dataset[n]);
+
+          if (dataset[n].Ended != null) {
+            timesum += moment.duration(moment(dataset[n].Ended).diff(moment(dataset[n].Started))).asMilliseconds();
+            cnt++;
+          }
         }
+        var tf = $("#tblDurations")[0].appendChild(document.createElement("tfoot"));
+        var tfr = tf.appendChild(document.createElement("tr"));
+        tfr.appendChild(document.createElement("td")).innerText = "";
+        tfr.appendChild(document.createElement("td")).innerText = "Total Time";
+        console.log("Total Duration: ", timesum);
+        tfr.appendChild(document.createElement("td")).innerText = moment.duration(timesum).humanize();
+        tfr = tf.appendChild(document.createElement("tr"));
+        tfr.appendChild(document.createElement("td")).innerText = "";
+        tfr.appendChild(document.createElement("td")).innerText = "Total Completed Records";
+        tfr.appendChild(document.createElement("td")).innerText = cnt.toString();
       } else {
         SetTableNote("No Durations found for " + query, "warning");
       }
@@ -171,7 +206,8 @@
               },
               rules: [
                 {
-                  id: 'value'
+                  id: 'value',
+                  operator: 'in'
                 },
                 {
                   condition: 'WHILE',
@@ -183,7 +219,8 @@
                       condition: 'AND',
                       rules: [
                         {
-                          id: 'value'
+                          id: 'value',
+                          operator: 'in'
                         }
                       ]
                     }
@@ -212,7 +249,7 @@
             id: 'value',
             label: 'DataItem Value',
             type: 'string',
-            operators: ['in'],
+            operators: ['in', "equal", "greater_or_equal", "less_or_equal", "greater", "less"],
             default_value: "(.*)"
           },
           {
@@ -322,11 +359,33 @@
               dataSource = processRule(rule.rules, rule.condition, dataSource);
             }
           } else if (rule.id == "value") {
-            var reg = new RegExp(rule.value, 'g');
             console.log("\tApplying [" + condition + "] " + rule.field + " with: ", rule.value);
-            predicateSources[condition].push(dataSource.filter(function (e, i) {
-              return reg.test(e.Value);
-            }));
+            if (rule.operator == "in") {
+              var reg = new RegExp(rule.value, 'g');
+              predicateSources[condition].push(dataSource.filter(function (e, i) {
+                return reg.test(e.Value);
+              }));
+            } else if (rule.operator == "equal") {
+              predicateSources[condition].push(dataSource.filter(function (e, i) {
+                return e.Value == rule.value;
+              }));
+            } else if (rule.operator == "greater_or_equal") {
+              predicateSources[condition].push(dataSource.filter(function (e, i) {
+                return e.Value >= rule.value;
+              }));
+            } else if (rule.operator == "less_or_equal") {
+              predicateSources[condition].push(dataSource.filter(function (e, i) {
+                return e.Value <= rule.value;
+              }));
+            } else if (rule.operator == "greater") {
+              predicateSources[condition].push(dataSource.filter(function (e, i) {
+                return e.Value > rule.value;
+              }));
+            } else if (rule.operator == "less") {
+              predicateSources[condition].push(dataSource.filter(function (e, i) {
+                return e.Value < rule.value;
+              }));
+            }
           } else if (rule.id == "dataItem") {
             //console.log("Querying DataItem");
             queryData(rule.value, this.start, this.end, rule.rules, condition, (function (data) {
@@ -385,36 +444,71 @@
       return nwSource;
     }
   </script>
+  <script type="text/javascript">
+    function drawTimeline(){
+      var startTime = moment.utc().startOf('day');
+      var endTime = moment.utc().endOf('day');
+      var fullSpan = moment.duration(endTime.diff(startTime)).asMilliseconds();// endTime - startTime;
+  
+      var canv = $("#timeline")[0];
+      var ctx = canv.getContext('2d');
+  
+      var clrs = [
+        "red",
+        "blue",
+        "green"
+      ];
+      var clrIndex = 0;
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canv.width, canv.height);
+      for(var len = durations.length,n=0;n<len;n++){
+        var item = durations[n];
+        if (item != null && item.Ended != null){
+          ctx.fillStyle = clrs[clrIndex];
+          var st = moment.utc(item.Started), et = moment.utc(item.Ended), ts = moment.duration(et.diff(st)).asMilliseconds();
+          var pos = {
+            x: ((endTime - st) / fullSpan) * canv.width,
+            y: 0,
+            w: (ts / fullSpan) * canv.width,
+            h: canv.height
+          };
+      
+          ctx.moveTo(pos.x, pos.y);
+          ctx.fillRect(pos.x, pos.y, pos.w, pos.h);
+
+          clrIndex++;
+          if (clrIndex == clrs.length){
+            clrIndex = 0;
+          }
+        }
+      }
+    };
+
+  </script>
 }
+<canvas id="timeline">Canvas not supported</canvas>
 <div class="row">
   <div class="col-lg-6 col-md-6">
     <div class="form-group">
-      <label for="selDataItem">Select a DataItem:</label>
-      <select class="form-control" id="selDataItems"></select>
+      <label for="selAdapterConfig">Adapter Configuration:</label>
+      <select id="selAdapterConfig" class="form-control"></select>
     </div>
-    <button id="btnQuery" type="button" class="btn btn-block btn-primary">Query</button>
+    <div id="queryBuilder"></div>
+    <button type="button" class="btn btn-block btn-primary" id="btnQueryBuilder">Run Query</button>
   </div>
   <div class="col-lg-6 col-md-6">
-    <div class="form-group">
-      <label for="txtFilter">Filter (RegExp):</label>
-      <input type="text" class="form-control" id="txtFilter" />
+    <div class="table-responsive">
+      <table id="tblDurations" class="table table-condensed table-hover table-striped">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Value</th>
+            <th>Duration <small>(hh:mm:ss.ms)</small></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
-    <button id="btnFilter" type="button" class="btn btn-block btn-primary">Filter</button>
   </div>
 </div>
 <br />
-<div class="table-responsive">
-  <table id="tblDurations" class="table table-condensed table-hover table-striped">
-    <thead>
-      <tr>
-        <th>Time</th>
-        <th>Value</th>
-        <th>Duration <small>(hh:mm:ss.ms)</small></th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</div>
-
-<div id="queryBuilder"></div>
-<button type="button" class="btn btn-block btn-primary" id="btnQueryBuilder">Run Query</button>
