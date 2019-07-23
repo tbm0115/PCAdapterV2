@@ -95,6 +95,7 @@
     }
     function SetTableNote(message, cssClass) {
       $("#tblDurations tbody").html("");
+      $("#tblDurations tfoot").html("");
       var td = $("#tblDurations tbody")[0].appendChild(document.createElement("tr")).appendChild(document.createElement("td"));
       td.setAttribute("class", cssClass);
       td.setAttribute("colspan", "3");
@@ -118,7 +119,8 @@
             cnt++;
           }
         }
-        var tf = $("#tblDurations")[0].appendChild(document.createElement("tfoot"));
+        var tf = $("#tblDurations tfoot")[0];
+        tf.innerHTML = "";
         var tfr = tf.appendChild(document.createElement("tr"));
         tfr.appendChild(document.createElement("td")).innerText = "";
         tfr.appendChild(document.createElement("td")).innerText = "Total Time";
@@ -271,6 +273,7 @@
     }
 
     $(document).ready(function () {
+      SetTableNote("Searching", "table-info");
       $("#btnQueryBuilder").on("click", function () {
         var qb = $("#queryBuilder")[0].queryBuilder;
         if (qb.validate()) {
@@ -296,7 +299,7 @@
       if (typeof postProcess == "undefined" || postProcess == null) {
         postProcess = true;
       }
-      var url = "api/durations/dataitem/" + dataItem + "/from/" + moment(start).format('YYYY-MM-DD') + "/to/" + moment(end).format('YYYY-MM-DD');
+      var url = "api/durations/dataitem/" + dataItem + "/from/" + moment.utc(start).format('YYYY-MM-DD') + "/to/" + moment.utc(end).format('YYYY-MM-DD');
       $.ajax({
         url: url,
         method: "GET",
@@ -507,6 +510,7 @@
           </tr>
         </thead>
         <tbody></tbody>
+        <tfoot></tfoot>
       </table>
     </div>
   </div>

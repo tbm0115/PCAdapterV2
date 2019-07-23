@@ -75,7 +75,7 @@ namespace PCAdapter.WebAPI.Controllers
             var startTime = start.Date;
             var endTime = end.Date.AddHours(23).AddMinutes(59).AddSeconds(59);
             return this._ctx.Durations.Where(o =>
-                 (o.Started >= startTime || (o.Ended >= startTime && o.Ended <= endTime))
+                 ((o.Started >= startTime && o.Started < endTime) || (o.Ended >= startTime && o.Ended <= endTime))
                  && o.Item.Name.ToLower() == name).Select(this.selectExpression).OrderByDescending(o => o.Started).ThenByDescending(o => o.Timespan).ToList();
         }
         [HttpGet]
