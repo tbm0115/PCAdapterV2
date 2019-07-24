@@ -82,8 +82,8 @@ namespace PCAdapter.WebAPI.Controllers
         [Route("dataitem/getduring")]//{name}/from/{start:datetime}/to/{end:datetime}/during")]
         public IEnumerable<DurationDTO> GetDuringDurations([FromBody] GetDuringDTO dto)
         {
-            var startTime = dto.start.Date;
-            var endTime = dto.end.Date.AddHours(23).AddMinutes(59).AddSeconds(59);
+            var startTime = DateTime.Parse(dto.start).Date;
+            var endTime = DateTime.Parse(dto.end).Date.AddHours(23).AddMinutes(59).AddSeconds(59);
             var results = this._ctx.GetDuringDataItems(dto.ids);//.AsQueryable();
             //var proof = results.ToList();
             return results.Where(o => o.Item.Name == dto.name &&
@@ -94,8 +94,8 @@ namespace PCAdapter.WebAPI.Controllers
         public class GetDuringDTO
         {
             public string name { get; set; }
-            public DateTime start { get; set; }
-            public DateTime end { get; set; }
+            public string start { get; set; }
+            public string end { get; set; }
             public int[] ids { get; set; }
             public GetDuringDTO()
             {

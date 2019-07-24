@@ -329,11 +329,12 @@
       if (typeof (options.duringIds) !== "undefined") {
         url = "api/Durations/dataitem/GetDuring";
         contentType = "application/json";
-
+        from = moment.utc(options.start).format();
+        to = moment.utc(options.end).format();
         body = {
           name: options.dataItem,
-          from: from,
-          to: to,
+          start: from,
+          end: to,
           ids: options.duringIds
         }
         method = "POST";
@@ -360,7 +361,6 @@
         "AND": [],
         "OR": []
       };
-      var nwSource = dataSource;// [];
       if (typeof rules !== "undefined" && rules != null && rules.length > 0) {
         //console.log("PROCESSING " + rules.length + " RULES");
         for (var len = rules.length, n = 0; n < len; n++) {
@@ -369,7 +369,7 @@
           if (typeof rule.condition !== "undefined" && typeof rule.rules !== "undefined") {
             if (rule.condition == "WHILE") {
               var whileSource = processRule(rule.rules, "WHILE", [], options, dataSource.map(function (e, i) { return e.Id; }));
-              //console.log("[QueryBuilder.processRule] While yielded " + whileSource.length + " results.");
+              console.log("[QueryBuilder.processRule] While yielded " + whileSource.length + " results.");
               if (whileSource.length > 0) {
                 console.log("[While] Before filter: ", dataSource.length);
                 var filterFunction = function (dataObject, i) {
@@ -395,7 +395,7 @@
                 predicateSources["AND"].push(new Array());
               }
             } else {
-              dataSource = processRule(rule.rules, rule.condition, dataSource, options);
+              dataSource = processRule(rule.rules, rule.condition, dataSource, options, dataSource.map(function (e, i) { return e.Id; }));
             }
           } else if (rule.id == "value") {
             console.log("\tApplying [" + condition + "] " + rule.field + " with: ", rule.value);
@@ -441,6 +441,7 @@
                 if (typeof data.filter == "undefined") {
                   console.log("Caught culprit", data);
                 }
+                dataSource = data;
                 predicateSources["OR"].push(data);
               },
               postProcess: false
@@ -450,6 +451,7 @@
           }
         }
         console.log("Predicate Sources for Condition[" + condition + "]: ", predicateSources);
+        var nwSource = dataSource;// [];
         var addUnique = function (src, cond, nw) {
           if (typeof src.filter === "undefined") {
             console.warn("Source.filter is undefined",src);
@@ -486,7 +488,7 @@
             nwSource = addUnique(predicateSources["AND"][a], "AND", nwSource);
           }
         } else if (condition == "WHILE"){
-          //nwSource = dataSource;
+          nwSource = dataSource;
         }
       }
       //console.log("Output for Condition[" + condition + "]: ", nwSource);
