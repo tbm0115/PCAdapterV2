@@ -78,6 +78,30 @@ namespace PCAdapter.WebAPI.Controllers
                  ((o.Started >= startTime && o.Started < endTime) || (o.Ended >= startTime && o.Ended <= endTime))
                  && o.Item.Name.ToLower() == name).Select(this.selectExpression).OrderByDescending(o => o.Started).ThenByDescending(o => o.Timespan).ToList();
         }
+        [HttpPost]
+        [Route("dataitem/getduring")]//{name}/from/{start:datetime}/to/{end:datetime}/during")]
+        public IEnumerable<DurationDTO> GetDuringDurations([FromBody] GetDuringDTO dto)
+        {
+            var startTime = dto.start.Date;
+            var endTime = dto.end.Date.AddHours(23).AddMinutes(59).AddSeconds(59);
+            var results = this._ctx.GetDuringDataItems(dto.ids);//.AsQueryable();
+            //var proof = results.ToList();
+            return results.Where(o => o.Item.Name == dto.name &&
+                 ((o.Started >= startTime && o.Started < endTime) || (o.Ended >= startTime && o.Ended <= endTime))
+            ).Select(this.selectExpression).OrderByDescending(o => o.Started).ThenByDescending(o => o.Timespan).ToList();
+        }
+
+        public class GetDuringDTO
+        {
+            public string name { get; set; }
+            public DateTime start { get; set; }
+            public DateTime end { get; set; }
+            public int[] ids { get; set; }
+            public GetDuringDTO()
+            {
+            }
+        }
+
         [HttpGet]
         [Route("today")]
         public IEnumerable<AdapterContext.DataModel.Duration> GetToday()

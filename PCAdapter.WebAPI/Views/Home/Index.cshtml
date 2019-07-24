@@ -110,6 +110,7 @@
         var cnt = 0;
         for (var len = dataset.length, n = 0; n < len; n++) {
           var tr = tbody.appendChild(document.createElement("tr"));
+          tr.setAttribute("data-id", dataset[n].Id.toString());
           tr.appendChild(document.createElement("td")).textContent = (new Date(dataset[n].Started + "Z")).toLocaleString();
           tr.appendChild(document.createElement("td")).textContent = dataset[n].Value;
           tr.appendChild(document.createElement("td")).textContent = displayTime(dataset[n]);
@@ -287,33 +288,74 @@
           var startDate = moment(startedRule.value).valueOf();
           var endDate = moment(endedRule.value).valueOf();
 
-          queryData(dataItemRule.value, startDate, endDate, additionalRules, "AND", function (data) {
+          var queryOptions = {
+            dataItem: dataItemRule.value,
+            start: startDate,
+            end: endDate,
+            rules: additionalRules,
+            condition: "AND",
+            callback: (function (data) {
+              data = processRule(this.rules, this.condition, data, this.options);
               durations = CompleteDataset(data);
               UpdateTable(data);
-          });
+            }).bind({
+              rules: additionalRules,
+              condition: "AND",
+              options: {
+                start: startDate,
+                end: endDate
+              }
+            })
+          }
+          queryData(queryOptions);
 
         }
       });
     });
-    function queryData(dataItem, start, end, rules, condition, callback, postProcess) {
+
+    function queryData(options) {//dataItem, start, end, rules, condition, callback, postProcess) {
       if (typeof postProcess == "undefined" || postProcess == null) {
         postProcess = true;
       }
-      var url = "api/durations/dataitem/" + dataItem + "/from/" + moment.utc(start).format('YYYY-MM-DD') + "/to/" + moment.utc(end).format('YYYY-MM-DD');
-      $.ajax({
+      // During: dataitem/{name}/from/{start:datetime}/to/{end:datetime}/during/{ids:int[]}
+      var from = moment.utc(options.start).format('YYYY-MM-DD');
+      var to = moment.utc(options.end).format('YYYY-MM-DD');
+      var url = "api/durations/dataitem/" + options.dataItem + "/from/" + from + "/to/" + to;
+      var method = "GET";
+      var body = null;
+      var traditional = false;
+      var contentType = "";
+      console.log("[queryData] options.duringIds: ", options.duringIds);
+      if (typeof (options.duringIds) !== "undefined") {
+        url = "api/Durations/dataitem/GetDuring";
+        contentType = "application/json";
+
+        body = {
+          name: options.dataItem,
+          from: from,
+          to: to,
+          ids: options.duringIds
+        }
+        method = "POST";
+      }
+      var request = {
         url: url,
-        method: "GET",
+        method: method,
+        data: JSON.stringify(body),
+        contentType: contentType,
         success: (function (data) {
           //console.log("[QueryBuilder.queryData] Preprocessing length: ", data.length);
           if (this.postProcess) {
             data = processRule(this.rules, this.condition, data, { start: this.start, end: this.end });
           }
           this.callback(data);
-        }).bind({ rules: rules, condition: condition, start: start, end: end, callback: callback, postProcess: postProcess }),
+        }).bind({ rules: options.rules, condition: options.condition, start: options.start, end: options.end, callback: options.callback, postProcess: options.postProcess }),
         async: false
-      });
+      };
+
+      $.ajax(request);
     }
-    function processRule(rules, condition, dataSource, options) {
+    function processRule(rules, condition, dataSource, options, upperIds) {
       var predicateSources = {
         "AND": [],
         "OR": []
@@ -326,7 +368,7 @@
           //console.log("Processing Rule[" + rule.field + "]: ", rule);
           if (typeof rule.condition !== "undefined" && typeof rule.rules !== "undefined") {
             if (rule.condition == "WHILE") {
-              var whileSource = processRule(rule.rules, "WHILE", [], options);
+              var whileSource = processRule(rule.rules, "WHILE", [], options, dataSource.map(function (e, i) { return e.Id; }));
               //console.log("[QueryBuilder.processRule] While yielded " + whileSource.length + " results.");
               if (whileSource.length > 0) {
                 console.log("[While] Before filter: ", dataSource.length);
@@ -336,17 +378,11 @@
                       return (whileObject.Ended !== null
                         && (
                           (
-                            (whileObject.Started >= dataObject.Started && whileObject.Ended <= dataObject.Ended) // Started and Ended During
-                            //|| (whileObject.Started <= dataObject.Started && whileObject.Ended <= dataObject.Ended) // Ended During
-                            //|| (whileObject.Started >= dataObject.Started && whileObject.Ended >= dataObject.Ended) // Started During
-                            || (whileObject.Started <= dataObject.Started && whileObject.Ended >= dataObject.Ended) // Started Before and Ended After
+                            (dataObject.Started >= whileObject.Started && dataObject.Started <= whileObject.Ended) // Started During
                           )
                           ||
                           (
-                            (dataObject.Started >= whileObject.Started && dataObject.Ended <= whileObject.Ended) // Started and Ended During
-                            //|| (dataObject.Started <= whileObject.Started && dataObject.Ended <= whileObject.Ended) // Ended During
-                            //|| (dataObject.Started >= whileObject.Started && dataObject.Ended >= whileObject.Ended) // Started During
-                            || (dataObject.Started <= whileObject.Started && dataObject.Ended >= whileObject.Ended) // Started Before and Ended After
+                            (dataObject.Ended >= whileObject.Started && dataObject.Ended <= whileObject.Ended) // Ended During
                           )
                         )
                       )
@@ -359,7 +395,7 @@
                 predicateSources["AND"].push(new Array());
               }
             } else {
-              dataSource = processRule(rule.rules, rule.condition, dataSource);
+              dataSource = processRule(rule.rules, rule.condition, dataSource, options);
             }
           } else if (rule.id == "value") {
             console.log("\tApplying [" + condition + "] " + rule.field + " with: ", rule.value);
@@ -390,17 +426,27 @@
               }));
             }
           } else if (rule.id == "dataItem") {
-            //console.log("Querying DataItem");
-            queryData(rule.value, this.start, this.end, rule.rules, condition, (function (data) {
-              //console.log("\tGot " + data.length + " results from " + rule.field);
-              //console.log("\t\tParent Rules Reference: ", rules);
-              //nwSource = data;
-              if (typeof data.filter == "undefined") {
-                console.log("Caught culprit", data);
-              }
-              predicateSources["OR"].push(data);
-            }), false);
-            //console.log("End DataItem");
+            console.log("Querying DataItem DataSource: ", dataSource);
+            var queryOptions = {
+              dataItem: rule.value,
+              start: options.start,
+              end: options.end,
+              rules: rule.rules,
+              condition: condition,
+              duringIds: upperIds,
+              callback: function (data) {
+                //console.log("\tGot " + data.length + " results from " + rule.field);
+                //console.log("\t\tParent Rules Reference: ", rules);
+                //nwSource = data;
+                if (typeof data.filter == "undefined") {
+                  console.log("Caught culprit", data);
+                }
+                predicateSources["OR"].push(data);
+              },
+              postProcess: false
+            }
+            queryData(queryOptions);
+            console.log("End DataItem");
           }
         }
         console.log("Predicate Sources for Condition[" + condition + "]: ", predicateSources);

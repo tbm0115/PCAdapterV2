@@ -1,12 +1,9 @@
-﻿using System;
+﻿using GraphQL;
+using GraphQL.Types;
+using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+using System.Web;
 
 namespace PCAdapter.GraphQL
 {
@@ -14,11 +11,26 @@ namespace PCAdapter.GraphQL
     {
         public static void Main(string[] args)
         {
-            CreateWebHostBuilder(args).Build().Run();
-        }
+            var schema = Schema.For(@"
+                type AdapterConfig {
+                    id: Int
+                    name: String
+                    pollRate: Int
+                }
 
-        public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
-            WebHost.CreateDefaultBuilder(args)
-                .UseStartup<Startup>();
+                type AdapterQuery {
+                    getAdapterConfig(name: String): AdapterConfig
+                }
+            ", o =>
+            {
+                o.Types.Include<PCAdapter.GraphQL.Models.AdapterQuery>();
+            });
+
+            var json = schema.Execute(o => o.Query = $"{{ config(name: \"Default\") {{ id name }} }}");
+
+            Console.WriteLine(json);
+
+            Console.ReadLine();
+        }
     }
 }
