@@ -5,11 +5,13 @@ using System.Threading.Tasks;
 using System.Reflection;
 using System.Runtime;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace PCAdapter
 {
     class Program
     {
+        public static string logPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PCAdapter.log");
         public enum ViewMode
         {
             Log,
@@ -33,6 +35,17 @@ namespace PCAdapter
     };
         static void Main(string[] args)
         {
+            if (System.IO.File.Exists(logPath))
+            {
+                var fsi = new System.IO.FileInfo(logPath);
+                if (fsi.Length > Math.Pow(10,7))
+                {
+                    System.IO.File.WriteAllText(logPath, "");
+                    log("Log file reset");
+                }
+            }
+            _handler += new EventHandler(Handler);
+            log("Application started");
             Console.Title = "PC Adapter";
 
             var ctx = new AdapterContext.AdapterModel();
@@ -84,13 +97,26 @@ namespace PCAdapter
 
                 if (skipPrompts || ask("Are you ready to start monitoring?"))
                 {
+                    //AppDomain.CurrentDomain.ProcessExit += CurrentDomain_ProcessExit;
+                    SetConsoleCtrlHandler(_handler, true);
                     Monitor(_adapter, defaultView);
+                    //AppDomain.CurrentDomain.ProcessExit -= CurrentDomain_ProcessExit;
                 }
             }
-
-            write("Press enter to exit");
-            Console.ReadLine();
+            if (!skipPrompts)
+            {
+                write("Press enter to exit");
+                Console.ReadLine();
+            }
+            log("Application closing");
         }
+        private static bool shutdown = false;
+        private static void CurrentDomain_ProcessExit(object sender, EventArgs e)
+        {
+            shutdown = true;
+            log("Shutdown requested");
+        }
+
         private static string SelectAdapterConfig(AdapterContext.AdapterModel ctx)
         {
             string selectedAdapterName = string.Empty;
@@ -159,12 +185,14 @@ namespace PCAdapter
 
         private static void Monitor(Adapter _adapter, string defaultView = "0")
         {
+            log("Monitoring beginning");
             _adapter.Start();
             string input = defaultView;
             View = ViewMode.Log;
             ResetView(-101);
             do
             {
+                if (shutdown) break;
                 if (Console.KeyAvailable)
                 {
                     input = Console.ReadKey().KeyChar.ToString();
@@ -192,8 +220,13 @@ namespace PCAdapter
                 }
 
                 System.Threading.Thread.Sleep(1000 / 60); // 60fps
-            } while (string.IsNullOrEmpty(input));
+                if (shutdown) break;
+            } while (string.IsNullOrEmpty(input) && !shutdown);
             _adapter.Stop();
+            if (shutdown)
+            {
+                log("Shutdown command succeeded.");
+            }
             //UpdateDataItems();
         }
 
@@ -391,6 +424,43 @@ namespace PCAdapter
                 }
             } while (selection < 0);
             return selection;
+        }
+
+        public static void log(string message)
+        {
+            System.IO.File.AppendAllText(logPath,
+                $"{DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss.ms tt")} - {message}\r\n");
+        }
+
+        [DllImport("Kernel32")]
+        private static extern bool SetConsoleCtrlHandler(EventHandler handler, bool add);
+
+        private delegate bool EventHandler(CtrlType sig);
+        static EventHandler _handler;
+
+        enum CtrlType
+        {
+            CTRL_C_EVENT = 0,
+            CTRL_BREAK_EVENT = 1,
+            CTRL_CLOSE_EVENT = 2,
+            CTRL_LOGOFF_EVENT = 5,
+            CTRL_SHUTDOWN_EVENT = 6
+        }
+
+        private static bool Handler(CtrlType sig)
+        {
+            shutdown = true;
+            log("Shutdown requested");
+            System.Threading.Thread.Sleep(5000);
+            switch (sig)
+            {
+                case CtrlType.CTRL_C_EVENT:
+                case CtrlType.CTRL_LOGOFF_EVENT:
+                case CtrlType.CTRL_SHUTDOWN_EVENT:
+                case CtrlType.CTRL_CLOSE_EVENT:
+                default:
+                    return false;
+            }
         }
     }
 }
