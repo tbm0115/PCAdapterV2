@@ -102,7 +102,6 @@
       td.textContent = message;
     }
     function UpdateTable(dataset) {
-      drawTimeline();
       var tbody = $("#tblDurations tbody")[0];
       tbody.innerHTML = "";
       if (typeof dataset != "undefined" && dataset != null && dataset.length > 0) {
@@ -298,6 +297,7 @@
               data = processRule(this.rules, this.condition, data, this.options);
               durations = CompleteDataset(data);
               UpdateTable(data);
+              drawTimeline({ start: this.options.start, end: this.options.end });
             }).bind({
               rules: additionalRules,
               condition: "AND",
@@ -468,7 +468,12 @@
             if (src.length == 0) {
               return nw;
             } else {
-              return src.filter(v => nw.filter(w => w.Id == v.Id).length <= 0);
+              for (var slen = src.length, s = 0; s < slen; s++) {
+                if (nw.filter(w => w.Id == src[s].Id).length <= 0) {
+                  nw.push(src[s]);
+                }
+              }
+              return nw;// src.filter(v => nw.filter(w => w.Id == v.Id).length <= 0);
             }
           } else {
             console.error("Unknown condition type");
@@ -496,9 +501,9 @@
     }
   </script>
   <script type="text/javascript">
-    function drawTimeline(){
-      var startTime = moment.utc().startOf('day');
-      var endTime = moment.utc().endOf('day');
+    function drawTimeline(options){
+      var startTime = moment.utc(options.start).startOf('day');
+      var endTime = moment.utc(options.end).endOf('day');
       var fullSpan = moment.duration(endTime.diff(startTime)).asMilliseconds();// endTime - startTime;
   
       var canv = $("#timeline")[0];
