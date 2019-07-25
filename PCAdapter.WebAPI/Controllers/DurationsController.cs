@@ -72,22 +72,22 @@ namespace PCAdapter.WebAPI.Controllers
         [Route("dataitem/{name}/from/{start:datetime}/to/{end:datetime}")]
         public IEnumerable<DurationDTO> GetByDataItemFromTo(string name, DateTime start, DateTime end)
         {
-            var startTime = start.Date;
-            var endTime = end.Date.AddHours(23).AddMinutes(59).AddSeconds(59);
+            var startTime = start.Date.ToUniversalTime();
+            var endTime = end.Date.ToUniversalTime().AddHours(23).AddMinutes(59).AddSeconds(59);
             return this._ctx.Durations.Where(o =>
-                 ((o.Started >= startTime && o.Started < endTime) || (o.Ended >= startTime && o.Ended <= endTime))
+                 ((o.Started >= startTime && o.Started < endTime))
                  && o.Item.Name.ToLower() == name).Select(this.selectExpression).OrderByDescending(o => o.Started).ThenByDescending(o => o.Timespan).ToList();
         }
         [HttpPost]
         [Route("dataitem/getduring")]//{name}/from/{start:datetime}/to/{end:datetime}/during")]
         public IEnumerable<DurationDTO> GetDuringDurations([FromBody] GetDuringDTO dto)
         {
-            var startTime = DateTime.Parse(dto.start).Date;
-            var endTime = DateTime.Parse(dto.end).Date.AddHours(23).AddMinutes(59).AddSeconds(59);
+            var startTime = DateTime.Parse(dto.start).Date.ToUniversalTime();
+            var endTime = DateTime.Parse(dto.end).Date.ToUniversalTime().AddHours(23).AddMinutes(59).AddSeconds(59);
             var results = this._ctx.GetDuringDataItems(dto.ids);//.AsQueryable();
             //var proof = results.ToList();
             return results.Where(o => o.Item.Name == dto.name &&
-                 ((o.Started >= startTime && o.Started < endTime) || (o.Ended >= startTime && o.Ended <= endTime))
+                 ((o.Started >= startTime && o.Started < endTime))
             ).Select(this.selectExpression).OrderByDescending(o => o.Started).ThenByDescending(o => o.Timespan).ToList();
         }
 

@@ -27,10 +27,14 @@
     var query = "";
     var baseTitle = document.title;
     $(document).ready(function () {
+      loadSavedRules();
+
+      SetTableNote("Loading Adapter Configurations...", "table-warning");
       $.ajax({
         url: "/api/AdapterConfigs",
         method: "GET",
         success: function (data) {
+          SetTableNote("Loaded Adapter Configurations. Please select one and Run a Query.", "table-info");
           adapters = data;
 
           var sel = $("#selAdapterConfig")[0];
@@ -49,7 +53,89 @@
         var selection = $("#selAdapterConfig").val();
         GetDataItems(selection);
       });
+
+      $("#btnRunQuery").on("click", function () {
+        var sel = $("#selSavedRules").val();
+        var qb = JSON.parse(window.localStorage.getItem('queryBuilder'));
+        var search = qb.savedRules.filter(function (e, i) { return e.name == sel; });
+        if (search.length > 0) {
+          $("#queryBuilder")[0].queryBuilder.setRules(search[0].rules);
+          $("#btnQueryBuilder").click();
+        }
+      });
+      $("#btnSaveQueryRequest").on("click", function () {
+        var rules = $("#queryBuilder")[0].queryBuilder.getRules();
+        var well = $("#modSaveQueryRules");
+        well.html("");
+        var ul = well[0].appendChild(document.createElement("ul"));//.append("<ul>");
+        var fncListRules = function (rule, list) {
+          if (typeof (rule.condition) !== "undefined") {
+            var li = list.appendChild(document.createElement("li"));//("<li>" + rule.condition + "</li>");
+            li.textContent = rule.condition;
+            if (typeof (rule.rules) !== "undefined") {
+              var liUl = li.appendChild(document.createElement("ul"));//("<ul>");
+              for (var len = rule.rules.length, n = 0; n < len; n++) {
+                fncListRules(rule.rules[n], liUl);
+              }
+            }
+          } else {
+            list.appendChild(document.createElement("li")).textContent = rule.field + " " + rule.operator + " " + rule.value;//("<li>" + rule.field + " " + rule.operator + " " + rule.value + "</li>");
+            
+          }
+        }
+
+        fncListRules(rules, ul);
+        var qb = window.localStorage.getItem('queryBuilder');
+        var idx = 1;
+        if (typeof (qb) !== "undefined" && qb !== null && typeof (qb.savedRules) !== "undefined" && qb.savedRules !== null) {
+          idx = qb.savedRules.length + 1;
+        }
+        $("#txtSaveQueryName").val("Query " + idx);
+
+        $("#modSaveQuery").modal("show");
+      });
+      $("#btnSaveQuery").on("click", function () {
+        var name = $("#txtSaveQueryName").val();
+        var rules = $("#queryBuilder")[0].queryBuilder.getRules();
+
+        saveQueryRules(name, rules);
+      });
     });
+
+    function loadSavedRules() {
+      var sel = $("#selSavedRules")[0];
+      sel.innerHTML = "";
+      var qb = JSON.parse(window.localStorage.getItem('queryBuilder'));
+      if (typeof (qb) !== "undefined" && qb !== null && typeof(qb.savedRules) !== "undefined" && qb.savedRules !== null) {
+        sel.appendChild(document.createElement("option")).innerText = "Select a Query to Run";
+        for (var len = qb.savedRules.length, n = 0; n < len; n++) {
+          var opt = document.createElement("option");
+          opt.value = qb.savedRules[n].name;
+          opt.innerText = qb.savedRules[n].name;
+          sel.appendChild(opt);
+        }
+      } else {
+        sel.appendChild(document.createElement("option")).innerText = "No Saved Queries!";
+      }
+      return qb;
+    }
+    function saveQueryRules(name, rules) {
+      var qb = JSON.parse(window.localStorage.getItem('queryBuilder'));
+      if (typeof (qb) == "undefined" || qb == null) {
+        qb = {
+          savedRules: new Array()
+        };
+      }
+      var search = qb.savedRules.filter(function (e, i) { return e.name == name; });
+      if (search.length <= 0) {
+        qb.savedRules.push({ name: name, rules: rules });
+      } else {
+        search[0].rules = rules;
+      }
+      window.localStorage.setItem('queryBuilder', JSON.stringify(qb));
+
+      loadSavedRules();
+    }
 
     function GetDataItems(adapterConfigId) {
       $.ajax({
@@ -149,7 +235,15 @@
       //var dur = moment.duration(ticksMS);
       //return dur.toString();//.humanize();
     }
+    function localToUTCMoment(d) {
+      var localDateString = d;
+      var localDateStringFormat = "MM/DD/YYYY";
+      var utcDateStringFormat = "YYYY-MM-DD HH:mm:ssZ";
 
+      var utcMoment = moment.utc(moment(localDateString, localDateStringFormat).utc().format(utcDateStringFormat));
+
+      return utcMoment
+    }
     function pad(n, width) {
       var n = n + '';
       return n.length >= width ? n : new Array(width - n.length + 1).join('0') + n;
@@ -273,7 +367,9 @@
     }
 
     $(document).ready(function () {
-      SetTableNote("Searching", "table-info");
+
+
+
       $("#btnQueryBuilder").on("click", function () {
         var qb = $("#queryBuilder")[0].queryBuilder;
         if (qb.validate()) {
@@ -284,8 +380,8 @@
           var endedRule = rules[1].rules[1];
           var additionalRules = rules[2].rules;
 
-          var startDate = moment(startedRule.value).valueOf();
-          var endDate = moment(endedRule.value).valueOf();
+          var startDate = localToUTCMoment(startedRule.value);// moment(startedRule.value).valueOf();
+          var endDate = localToUTCMoment(endedRule.value);//moment(endedRule.value).valueOf();
 
           var queryOptions = {
             dataItem: dataItemRule.value,
@@ -395,7 +491,7 @@
                 predicateSources["AND"].push(new Array());
               }
             } else {
-              dataSource = processRule(rule.rules, rule.condition, dataSource, options, dataSource.map(function (e, i) { return e.Id; }));
+              predicateSources[condition].push(processRule(rule.rules, rule.condition, dataSource, options, dataSource.map(function (e, i) { return e.Id; })));
             }
           } else if (rule.id == "value") {
             console.log("\tApplying [" + condition + "] " + rule.field + " with: ", rule.value);
@@ -451,7 +547,7 @@
           }
         }
         console.log("Predicate Sources for Condition[" + condition + "]: ", predicateSources);
-        var nwSource = dataSource;// [];
+        var nwSource = [];// = dataSource;// [];
         var addUnique = function (src, cond, nw) {
           if (typeof src.filter === "undefined") {
             console.warn("Source.filter is undefined",src);
@@ -502,13 +598,44 @@
   </script>
   <script type="text/javascript">
     function drawTimeline(options){
-      var startTime = moment.utc(options.start).startOf('day');
-      var endTime = moment.utc(options.end).endOf('day');
-      var fullSpan = moment.duration(endTime.diff(startTime)).asMilliseconds();// endTime - startTime;
-  
+      var startTime = options.start.local();
+      var endTime = options.end.local();
+      //var fullSpan = moment.duration(endTime.diff(startTime)).asMilliseconds();// endTime - startTime;
+      
       var canv = $("#timeline")[0];
+      var canvGBCR = canv.getBoundingClientRect();
+      var canvSize = {
+        width: canvGBCR.width,
+        height: canvGBCR.height,
+        time: {
+          stringStart: startTime,
+          stringEnd: endTime,
+          start: startTime.startOf('day'),
+          end: endTime.endOf('day'),
+        },
+        ticks: {
+          start: 0,
+          totalSpan: 0,
+          end: 0,
+          getPosFromDate: function (d) {
+            var mDur = moment.duration(d.diff(canvSize.time.start)).asMilliseconds();
+            //var inverseSpan = canvSize.ticks.totalSpan - mDur;
+            var spanPercent = (mDur / canvSize.ticks.totalSpan);
+            return spanPercent * canvSize.width;
+          },
+          getWidthFromDates: function (s, e) {
+            var spanPercent = moment.duration(e.diff(s)).asMilliseconds() / canvSize.ticks.totalSpan;
+            return spanPercent * canvSize.width;
+          }
+        }
+      };
+      canvSize.ticks.totalSpan = moment.duration(canvSize.time.end.diff(canvSize.time.start)).asMilliseconds();
+      canvSize.ticks.end = canvSize.ticks.totalSpan;
+
+      console.log("Canvas Size: ", canvSize);
       var ctx = canv.getContext('2d');
-  
+      
+
       var clrs = [
         "red",
         "blue",
@@ -516,20 +643,40 @@
       ];
       var clrIndex = 0;
       ctx.fillStyle = "white";
-      ctx.fillRect(0, 0, canv.width, canv.height);
+      ctx.clearRect(0, 0, canvSize.width, canvSize.height);
+      canv.width = canvSize.width;
+      canv.height = canvSize.height;
+      
+      var textMargin = 2;
+      var fontSize = 14;
+      var mapYStart = (canvSize.height * 0.1) + (fontSize);
+      var mapHeight = (canvSize.height * 0.9) - mapYStart;
+      var drawnPositions = new Array();
+
+
       for(var len = durations.length,n=0;n<len;n++){
         var item = durations[n];
         if (item != null && item.Ended != null){
           ctx.fillStyle = clrs[clrIndex];
-          var st = moment.utc(item.Started), et = moment.utc(item.Ended), ts = moment.duration(et.diff(st)).asMilliseconds();
+          var st = moment.utc(item.Started + "Z").local(),
+            et = moment.utc(item.Ended + "Z").local();
           var pos = {
-            x: ((endTime - st) / fullSpan) * canv.width,
-            y: 0,
-            w: (ts / fullSpan) * canv.width,
-            h: canv.height
+            x: canvSize.ticks.getPosFromDate(st),// (moment.duration(endTime.diff(st)).asMilliseconds() / fullSpan) * canvSize.width,
+            y: mapYStart,
+            w: canvSize.ticks.getWidthFromDates(st,et),// (ts / fullSpan) * canvSize.width,
+            h: mapHeight,
+            positions: {
+              start: canvSize.ticks.getPosFromDate(st),
+              end: canvSize.ticks.getPosFromDate(et)
+            },
+            time: {
+              start: st,
+              end: et
+            }
           };
+          drawnPositions.push(pos);
       
-          ctx.moveTo(pos.x, pos.y);
+          //ctx.moveTo(pos.x, pos.y);
           ctx.fillRect(pos.x, pos.y, pos.w, pos.h);
 
           clrIndex++;
@@ -538,6 +685,40 @@
           }
         }
       }
+
+      // Draw Markers
+      var markers = new Array();
+      var markerHourSpan = 2;
+      var markerWidth = 4;
+      var markerOff = markerWidth / 2;
+      var yHeight = canvSize.height * 0.1;
+      var tickYPos = canvSize.height - (yHeight);
+      for (var i = 0; i < (moment.duration(canvSize.ticks.totalSpan).asHours() / markerHourSpan); i++) {
+        var hour = i * markerHourSpan;
+        var time = moment(canvSize.time.start).add(hour, 'hours');
+        var marker = {
+          time: time,
+          x: 0,
+          y: tickYPos,
+          w: markerWidth,
+          h: yHeight
+        };
+        marker.x = canvSize.ticks.getPosFromDate(marker.time) - markerOff;// (moment.duration(endTime.diff(marker.time)).asMilliseconds() / fullSpan) * canvSize.width;
+        markers.push(marker);
+
+      }
+      ctx.fillStyle = "black";
+      ctx.strokeStyle = "black";
+      ctx.font = fontSize + "px Arial";
+      ctx.textBaseline = "top";
+      ctx.textAlign = "center";
+      for (var len = markers.length, n = 0; n < len; n++) {
+        ctx.moveTo(markers[n].x, markers[n].y);
+        ctx.fillRect(markers[n].x, markers[n].y, markers[n].w, markers[n].h);
+
+        ctx.fillText(markers[n].time.format("h A"), markers[n].x, textMargin);
+      }
+
     };
 
   </script>
@@ -545,9 +726,22 @@
 <canvas id="timeline">Canvas not supported</canvas>
 <div class="row">
   <div class="col-lg-6 col-md-6">
-    <div class="form-group">
-      <label for="selAdapterConfig">Adapter Configuration:</label>
-      <select id="selAdapterConfig" class="form-control"></select>
+    <div class="row">
+      <div class="col-lg-6 col-md-6">
+        <div class="form-group">
+          <label for="selAdapterConfig">Adapter Configuration:</label>
+          <select id="selAdapterConfig" class="form-control"></select>
+        </div>
+      </div>
+      <div class="col-lg-6 col-md-6">
+        <div class="input-group">
+          <select id="selSavedRules" class="form-control"></select>
+          <span class="input-group-btn">
+            <button type="button" class="btn btn-primary" id="btnRunQuery"><i class="glyphicon glyphicon-play"></i></button>
+          </span>
+        </div>
+        <button type="button" class="btn btn-default btn-block" id="btnSaveQueryRequest">Save Query</button>
+      </div>
     </div>
     <div id="queryBuilder"></div>
     <button type="button" class="btn btn-block btn-primary" id="btnQueryBuilder">Run Query</button>
@@ -569,3 +763,30 @@
   </div>
 </div>
 <br />
+
+<div id="modSaveQuery" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+
+    <!-- Modal content-->
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title">Save Query</h4>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you wish to save the following query:</p>
+        <div id="modSaveQueryRules" class="well">
+
+        </div>
+        <div class="input-group">
+          <input type="text" id="txtSaveQueryName" value="" class="form-control" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+        <button id="btnSaveQuery" type="button" class="btn btn-primary" data-dismiss="modal">Finish</button>
+      </div>
+    </div>
+
+  </div>
+</div>
