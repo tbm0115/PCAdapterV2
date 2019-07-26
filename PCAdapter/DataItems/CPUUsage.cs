@@ -11,6 +11,13 @@ namespace PCAdapter
     public new bool IsActive { get; set; }
     public new int TickFrequency { get; set; }
     private bool isTicking { get; set; }
+
+        private PerformanceCounter pc;
+        public CPUUsage()
+        {
+            pc = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+        }
+
     public override async void Tick()
     {
       if (!this.isTicking)
@@ -22,7 +29,7 @@ namespace PCAdapter
     }
     private void tick()
     {
-      base.Value = (object)new PerformanceCounter("Processor", "% Processor Time", "_Total").NextValue();
+      base.Value = pc.NextValue();
     }
   }
 }

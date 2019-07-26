@@ -11,11 +11,13 @@ namespace PCAdapter
     public new string Name => "Memory Usage";
     public new bool IsActive { get; set; }
     public new int TickFrequency { get; set; }
-    private decimal totalMemory { get; set; }
+        private decimal totalMemory;
+        private PerformanceCounter pc;
 
     public MemoryUsage():base()
     {
       this.totalMemory = (decimal)PerformanceInfo.GetPhysicalAvailableMemoryInMiB();
+            this.pc = new PerformanceCounter("Memory", "Available MBytes");
     }
     private bool isTicking { get; set; }
     public override async void Tick()
@@ -29,8 +31,9 @@ namespace PCAdapter
     }
     private void tick()
     {
-      Int64 tot = PerformanceInfo.GetTotalMemoryInMiB();
-      decimal percFree = (this.totalMemory / (decimal)tot) * 100;
+            var val = pc.NextValue();
+            //long tot = PerformanceInfo.GetTotalMemoryInMiB();
+      decimal percFree = ((decimal)val / this.totalMemory) * 100;
       decimal percOcc = 100 - percFree;
       base.Value = percOcc;// (object)new PerformanceCounter("Memory", "Available MBytes").NextValue();
     }
